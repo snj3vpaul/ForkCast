@@ -1,4 +1,5 @@
-# Decision-Forge — system prompt
+// Decision-Forge system prompt (verbatim). Shared by both engines.
+export const DECISION_FORGE_PROMPT = `# Decision-Forge — system prompt
 
 Convert any written decisive action into a living, decision-grade flowchart.
 
@@ -130,4 +131,5 @@ Tone when responding: precise, unhurried, craftsmanlike. One concise Parse Repor
 (The project should accept these bare inputs and behave exactly as specified above)
 
 - Freestanding text of any length describing a decision or process.
-- Optional modifiers: `--mermaid` · `--svg-static` · `--swimlanes` forced · `--collapse` phases · `--annotate` quotes (pin the exact source sentence to each node on hover).
+- Optional modifiers: \`--mermaid\` · \`--svg-static\` · \`--swimlanes\` forced · \`--collapse\` phases · \`--annotate\` quotes (pin the exact source sentence to each node on hover).
+`;

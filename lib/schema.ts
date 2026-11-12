@@ -120,11 +120,11 @@ export const FORGE_TOOL = {
   },
 };
 
-export const OUTPUT_CONTRACT = `
+export const GRAPH_RULES = `
 ## FORKCAST OUTPUT CONTRACT (overrides §5 delivery mechanics only)
 
 You are running inside the Forkcast app. Do not write prose, HTML, SVG or Mermaid yourself.
-Call the \`emit_forkcast\` tool exactly once. The app renders your graph with the Ink & Signal
+The app renders your graph with the Ink & Signal
 visual system (spine, lateral consequence, swimlanes, Judgment Line, commit padlocks,
 dashed UNSTATED paths, interactive hover/click) and generates Mermaid / static SVG exports.
 
@@ -139,4 +139,15 @@ Graph rules to encode:
 - Set "actor" on every node when ≥ 2 actors exist (implied actors included, e.g. "Approver (implied)").
 - Fill sourceQuote verbatim for every node backed by source text. Mark derived nodes inferred: true and explain each in the ledger.
 - The parse report is ≤ 150 words in total. Sensitive domains (legal, medical, HR) add the ledger line "Not legal/medical advice; parsed as written."
+`;
+
+export const TOOL_DELIVERY = "\nDeliver: call the `emit_forkcast` tool exactly once.\n";
+
+export const PASTE_DELIVERY = `
+Deliver: reply with ONE fenced \`\`\`json code block and nothing else — no preamble, no commentary.
+The JSON object must match this JSON Schema exactly (same field names, same enums):
+
+\`\`\`json
+${JSON.stringify(FORGE_TOOL.input_schema)}
+\`\`\`
 `;

@@ -4,7 +4,9 @@
 
 Paste any written decision, from a one-line executive choice to a multi-page SOP. Forkcast turns it into a decision-grade flowchart that shows every gate, actor, loop, dead end and gap. It runs on the **Decision-Forge** engine and draws with the **Ink & Signal** design language.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fsnj3vpaul%2FForkCast&env=ANTHROPIC_API_KEY&envDescription=Anthropic%20API%20key%20used%20by%20the%20Decision-Forge%20engine&project-name=forkcast)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fsnj3vpaul%2FForkCast&project-name=forkcast)
+
+**No server secrets and no running costs.** Forkcast has no backend, and the owner never pays for anyone's model usage.
 
 ## What you get
 
@@ -32,37 +34,42 @@ Toggle these in the UI, or type them into the text:
 
 Every chart can also be exported as **SVG** or copied as **Mermaid**, with the Ink & Signal styling carried over as classDefs.
 
+## Engines: who runs the model?
+
+| Engine | Cost to you | How it works |
+|---|---|---|
+| **Paste from Claude** (default) | Free | Forkcast builds the full Decision-Forge prompt with your text. You paste it into a chat at claude.ai (the free plan works), then paste Claude's JSON reply back. Forkcast validates it and draws the chart. |
+| **My API key** (optional) | The user's own key | The browser calls `api.anthropic.com` directly using the visitor's key. The key can be saved in localStorage if the visitor chooses. It never reaches a Forkcast server, because there isn't one. |
+
 ## How it works
 
 ```
-prose ──► /api/forge ──► Claude (Decision-Forge system prompt + forced tool call)
-                           └─► typed logic graph (nodes, edges, flags, ledger)
-                                 └─► lib/validate.ts  (§7 quality bar: dead ends, unlabelled gates, loop exits)
-                                       └─► lib/layout.ts (spine/lateral layout, lanes, loops, Judgment Line)
-                                             └─► components/Diagram.tsx (Ink & Signal SVG)
+prose ──► Decision-Forge prompt (lib/prompt.ts + lib/schema.ts)
+            ├─ paste mode: user's Claude chat ──► JSON reply ──► lib/engine.ts extractForge()
+            └─ key mode:   browser ──► api.anthropic.com (forced tool call)
+                 └─► lib/validate.ts  (§7 quality bar: dead ends, unlabelled gates, loop exits)
+                       └─► lib/layout.ts (spine/lateral layout, lanes, loops, Judgment Line)
+                             └─► components/Diagram.tsx (Ink & Signal SVG)
 ```
 
 The model handles the *logic*. Forkcast's own renderer handles the *look*, so every chart follows the same design language instead of the model's default styling.
 
-- System prompt: [`prompts/decision-forge.md`](prompts/decision-forge.md)
+- System prompt (verbatim): [`lib/prompt.ts`](lib/prompt.ts)
 - Output contract and JSON schema: [`lib/schema.ts`](lib/schema.ts)
 
 ## Run locally
 
 ```bash
-cp .env.example .env.local   # add ANTHROPIC_API_KEY
 npm install
 npm run dev
 ```
 
-On first load the page shows a pre-rendered demo, so you can see the design without making an API call.
+On first load the page shows a pre-rendered demo. No environment variables are needed.
 
 ## Deploy on Vercel
 
-1. Import this repo at [vercel.com/new](https://vercel.com/new), or use the button above.
-2. Add the environment variable `ANTHROPIC_API_KEY`. `ANTHROPIC_MODEL` is optional and defaults to `claude-sonnet-5-5`.
-3. Deploy. The API route runs on the Node runtime with `maxDuration = 120`.
+Import the repo at [vercel.com/new](https://vercel.com/new) and click **Deploy**. There's nothing to configure. If you added `ANTHROPIC_API_KEY` earlier, you can delete it; it's no longer used.
 
 ## Stack
 
-Next.js 15 (App Router) · TypeScript · `@anthropic-ai/sdk` · no UI framework (the SVG is hand-built).
+Next.js 15 (App Router, fully static) · TypeScript · no backend, no SDK, no UI framework (the SVG is hand-built).

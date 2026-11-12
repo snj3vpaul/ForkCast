@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Diagram } from "@/components/Diagram";
 import { SAMPLE_FORGE, SAMPLE_TEXT } from "@/lib/sample";
 import { toMermaid } from "@/lib/mermaid";
+import { buildCorrectionPrompt, buildPastePrompt, extractForge, forgeWithKey, type ForgeResult } from "@/lib/engine";
 import type { Forge, Modifiers } from "@/lib/types";
 
 const MODS: { key: keyof Modifiers; flag: string; hint: string }[] = [
@@ -28,30 +29,54 @@ export default function Home() {
   const [corrections, setCorrections] = useState("");
   const [zoom, setZoom] = useState(1);
   const [copied, setCopied] = useState(false);
+  const [engine, setEngine] = useState<"paste" | "key">("paste");
+  const [reply, setReply] = useState("");
+  const [promptCopied, setPromptCopied] = useState<string | null>(null);
+  const [apiKey, setApiKey] = useState("");
+  const [model, setModel] = useState("claude-sonnet-5-5");
+  const [remember, setRemember] = useState(false);
+  const [correctionSent, setCorrectionSent] = useState(false);
+
+  useEffect(() => {
+    try {
+      const k = localStorage.getItem("forkcast:key");
+      const m = localStorage.getItem("forkcast:model");
+      const e = localStorage.getItem("forkcast:engine");
+      if (k) (setApiKey(k), setRemember(true));
+      if (m) setModel(m);
+      if (e === "key" || e === "paste") setEngine(e);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("forkcast:engine", engine);
+      localStorage.setItem("forkcast:model", model);
+      if (remember && apiKey) localStorage.setItem("forkcast:key", apiKey);
+      else localStorage.removeItem("forkcast:key");
+    } catch {}
+  }, [engine, model, remember, apiKey]);
   const svgRef = useRef<SVGSVGElement>(null);
   const lastInput = useRef<{ text: string; flags: string[] }>({ text: "", flags: [] });
 
   const mermaid = useMemo(() => toMermaid(forge), [forge]);
   const pr = forge.parseReport;
 
+  function accept(r: ForgeResult & { truncated?: boolean }, corrected: boolean) {
+    setForge(r.forge);
+    setIsDemo(false);
+    setAudit([...r.audit, ...(r.truncated ? ["Response hit the token limit; the graph may be incomplete."] : [])]);
+    const needs = !corrected && ((r.forge.parseReport?.flags?.length ?? 0) >= 3 || r.forge.parseReport?.confidence === "low");
+    setAwaitingConfirm(needs);
+    setCorrections("");
+  }
+
   async function run(input: string, flags: string[], corr?: string) {
+    if (!apiKey.trim()) return setError("Add your Anthropic API key first, or switch to “Paste from Claude”.");
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/forge", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: input, modifiers: flags, corrections: corr }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      const f: Forge = data.forge;
-      setForge(f);
-      setIsDemo(false);
-      setAudit([...(data.audit ?? []), ...(data.truncated ? ["Response hit the token limit; the graph may be incomplete."] : [])]);
-      const needs = !corr && ((f.parseReport?.flags?.length ?? 0) >= 3 || f.parseReport?.confidence === "low");
-      setAwaitingConfirm(needs);
-      setCorrections("");
+      accept(await forgeWithKey({ apiKey, model, text: input, flags, corrections: corr }), !!corr);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -59,7 +84,7 @@ export default function Home() {
     }
   }
 
-  function forgeIt() {
+  function readInput() {
     // Accept bare modifiers typed into the text, per the message template.
     const typed = MODS.filter((m) => new RegExp(`(^|\\s)${m.flag}(\\s|$)`).test(text));
     const next = { ...mods };
@@ -68,6 +93,37 @@ export default function Home() {
     const clean = MODS.reduce((t, m) => t.replace(new RegExp(`(^|\\s)${m.flag}(?=\\s|$)`, "g"), " "), text).trim();
     const flags = MODS.filter((m) => next[m.key]).map((m) => m.flag);
     lastInput.current = { text: clean, flags };
+    return { clean, flags };
+  }
+
+  async function copyText(t: string, tag: string) {
+    try {
+      await navigator.clipboard.writeText(t);
+      setPromptCopied(tag);
+      setTimeout(() => setPromptCopied(null), 2500);
+    } catch {
+      setError("Clipboard blocked by the browser. Select and copy manually.");
+    }
+  }
+
+  function copyPrompt() {
+    const { clean, flags } = readInput();
+    setError(null);
+    copyText(buildPastePrompt(clean, flags), "prompt");
+  }
+
+  function renderReply() {
+    setError(null);
+    try {
+      accept(extractForge(reply), correctionSent);
+      setCorrectionSent(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  function forgeIt() {
+    const { clean, flags } = readInput();
     run(clean, flags);
   }
 
@@ -121,14 +177,75 @@ export default function Home() {
               </button>
             ))}
           </div>
-          <div className="actions">
-            <button className="primary" disabled={loading || !text.trim()} onClick={forgeIt}>
-              {loading ? "Forging…" : "Forge the flowchart →"}
+          <div className="kicker">03 · ENGINE</div>
+          <div className="tabs" role="tablist">
+            <button role="tab" aria-selected={engine === "paste"} className={engine === "paste" ? "on" : ""} onClick={() => setEngine("paste")}>
+              Paste from Claude <span className="free">FREE</span>
             </button>
-            <button className="ghost" onClick={() => setText(SAMPLE_TEXT)}>
-              Load sample
+            <button role="tab" aria-selected={engine === "key"} className={engine === "key" ? "on" : ""} onClick={() => setEngine("key")}>
+              My API key
             </button>
           </div>
+
+          {engine === "paste" ? (
+            <div className="engine">
+              <ol className="steps">
+                <li>
+                  <button className="primary" disabled={!text.trim()} onClick={copyPrompt}>
+                    {promptCopied === "prompt" ? "Prompt copied ✓" : "Copy prompt"}
+                  </button>
+                </li>
+                <li>
+                  Paste it into a new chat at{" "}
+                  <a href="https://claude.ai/new" target="_blank" rel="noreferrer">
+                    claude.ai ↗
+                  </a>
+                  . The free plan works too.
+                </li>
+                <li>
+                  Copy Claude&apos;s whole reply and paste it here:
+                  <textarea
+                    className="reply"
+                    value={reply}
+                    onChange={(e) => setReply(e.target.value)}
+                    placeholder={"```json\n{ \"title\": … }\n```"}
+                    spellCheck={false}
+                  />
+                  <div className="actions">
+                    <button className="primary" disabled={!reply.trim()} onClick={() => renderReply()}>
+                      Render flowchart →
+                    </button>
+                    <button className="ghost" onClick={() => setText(SAMPLE_TEXT)}>
+                      Load sample
+                    </button>
+                  </div>
+                </li>
+              </ol>
+            </div>
+          ) : (
+            <div className="engine">
+              <label className="field">
+                <span>Anthropic API key</span>
+                <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-ant-…" autoComplete="off" />
+              </label>
+              <label className="field">
+                <span>Model</span>
+                <input value={model} onChange={(e) => setModel(e.target.value)} />
+              </label>
+              <label className="check">
+                <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> Remember key in this browser
+              </label>
+              <div className="actions">
+                <button className="primary" disabled={loading || !text.trim()} onClick={forgeIt}>
+                  {loading ? "Forging…" : "Forge the flowchart →"}
+                </button>
+                <button className="ghost" onClick={() => setText(SAMPLE_TEXT)}>
+                  Load sample
+                </button>
+              </div>
+              <p className="fine">Your key goes straight from this browser to api.anthropic.com. Forkcast has no server that sees it.</p>
+            </div>
+          )}
           {error && <div className="error">{error}</div>}
           <p className="fine">
             Fidelity before beauty: gaps become dashed <em>UNSTATED</em> paths, never silent inventions. Anything derived is marked ✎ and
@@ -178,18 +295,28 @@ export default function Home() {
               </p>
               <textarea value={corrections} onChange={(e) => setCorrections(e.target.value)} placeholder="Corrections (optional)" />
               <div className="actions">
-                <button
-                  className="primary"
-                  disabled={loading}
-                  onClick={() =>
-                    corrections.trim()
-                      ? run(lastInput.current.text, lastInput.current.flags, corrections)
-                      : setAwaitingConfirm(false)
-                  }
-                >
-                  {loading ? "Re-forging…" : corrections.trim() ? "Apply corrections & render" : "Confirm & render"}
-                </button>
+                {corrections.trim() && engine === "paste" ? (
+                  <button className="primary" onClick={() => (copyText(buildCorrectionPrompt(corrections), "corr"), setCorrectionSent(true), setReply(""))}>
+                    {promptCopied === "corr" ? "Copied ✓ Send it in the same chat" : "Copy correction message"}
+                  </button>
+                ) : (
+                  <button
+                    className="primary"
+                    disabled={loading}
+                    onClick={() =>
+                      corrections.trim() ? run(lastInput.current.text, lastInput.current.flags, corrections) : setAwaitingConfirm(false)
+                    }
+                  >
+                    {loading ? "Re-forging…" : corrections.trim() ? "Apply corrections & render" : "Confirm & render"}
+                  </button>
+                )}
               </div>
+              {corrections.trim() && engine === "paste" && (
+                <p className="fine">
+                  Send that message in the same Claude chat, paste the new reply into step 3, and click Render. The corrected chart opens
+                  without asking again.
+                </p>
+              )}
             </div>
           ) : (
             <>
