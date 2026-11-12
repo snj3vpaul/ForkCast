@@ -1,0 +1,23 @@
+{
+  "name": "forkcast",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Forkcast — paste any written decision process, get a living, decision-grade flowchart (Decision-Forge engine, Ink & Signal design language).",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "next": "^15.5.29",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "typescript": "^5.6.0"
+  }
+}
