@@ -121,9 +121,12 @@ export const FORGE_TOOL = {
 };
 
 export const GRAPH_RULES = `
-## FORKCAST OUTPUT CONTRACT (overrides §5 delivery mechanics only)
+## FORKCAST OUTPUT CONTRACT (overrides §2's confirm step and §5 delivery mechanics)
 
 You are running inside the Forkcast app. Do not write prose, HTML, SVG or Mermaid yourself.
+Never stop to ask the user to confirm or clarify, even with ≥ 3 flags or low confidence:
+always emit the complete graph. The app shows your Parse Report and runs the confirmation
+step itself. If the user later sends corrections, apply them and emit the complete graph again.
 The app renders your graph with the Ink & Signal
 visual system (spine, lateral consequence, swimlanes, Judgment Line, commit padlocks,
 dashed UNSTATED paths, interactive hover/click) and generates Mermaid / static SVG exports.
@@ -145,6 +148,9 @@ export const TOOL_DELIVERY = "\nDeliver: call the `emit_forkcast` tool exactly o
 
 export const PASTE_DELIVERY = `
 Deliver: reply with ONE fenced \`\`\`json code block and nothing else — no preamble, no commentary.
+Put the JSON directly in your message. Do not use an artifact, canvas, document or file attachment,
+and do not ask a question first. If you run out of room mid-JSON, stop; when the user says "continue",
+open a new \`\`\`json block and resume at the exact character where you stopped, repeating nothing.
 The JSON object must match this JSON Schema exactly (same field names, same enums):
 
 \`\`\`json

@@ -1,4 +1,5 @@
 import type { Forge, FlowEdge, FlowNode } from "./types";
+import { rootOf } from "./validate";
 
 /* ───────────── Ink & Signal layout engine ─────────────
  * Vertical spine, lateral consequence: rank = longest forward path from START,
@@ -106,7 +107,7 @@ export function layout(f: Forge, forceLanes = false): Layout {
   // 1. Back-edge detection (DFS from START, then any unvisited node)
   const back = new Set<FlowEdge>();
   const state = new Map<string, 1 | 2>();
-  const start = nodes.find((n) => n.kind === "start") ?? nodes[0];
+  const start = rootOf(f);
   const roots = [start, ...nodes.filter((n) => n !== start)];
   for (const root of roots) {
     if (!root || state.has(root.id)) continue;
@@ -234,7 +235,7 @@ export function layout(f: Forge, forceLanes = false): Layout {
   const topOf = (n: PNode) => n.y - n.h / 2;
   // y offset (from a row's centre) that lands in the empty gap beneath that row
   const rowGapBelow = (r: number) => rowH[r] / 2 + ROW_GAP / 2;
-  let rightmost = Math.max(...pnodes.map((n) => n.x + n.w / 2));
+  let rightmost = Math.max(0, ...pnodes.map((n) => n.x + n.w / 2));
   let loopIdx = 0;
   // A gate's nearest rightward exit owns the side vertex; further ones leave from the bottom vertex.
   const sideOwner = new Map<string, FlowEdge>();
@@ -254,7 +255,19 @@ export function layout(f: Forge, forceLanes = false): Layout {
     let pts: [number, number][];
     let labelAt: [number, number];
 
-    if (isBack) {
+    if (isBack && a === b) {
+      // self-loop: a small hook off the right side
+      const r = a.x + a.w / 2;
+      const cx = r + 34;
+      pts = [
+        [r, a.y - 6],
+        [cx, a.y - 6],
+        [cx, a.y + 6],
+        [r + 2, a.y + 6],
+      ];
+      labelAt = [cx + 6, a.y - 20];
+      rightmost = Math.max(rightmost, cx + 60);
+    } else if (isBack) {
       const lo = Math.min(a.rank, b.rank);
       const hi = Math.max(a.rank, b.rank);
       const span = pnodes.filter((n) => n.rank >= lo && n.rank <= hi);

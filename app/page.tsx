@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Diagram } from "@/components/Diagram";
 import { SAMPLE_FORGE, SAMPLE_TEXT } from "@/lib/sample";
 import { toMermaid } from "@/lib/mermaid";
-import { buildCorrectionPrompt, buildPastePrompt, extractForge, forgeWithKey, type ForgeResult } from "@/lib/engine";
+import { DEFAULT_MODEL, buildCorrectionPrompt, buildPastePrompt, extractForge, forgeWithKey, type ForgeResult } from "@/lib/engine";
 import type { Forge, Modifiers } from "@/lib/types";
 
 const MODS: { key: keyof Modifiers; flag: string; hint: string }[] = [
@@ -33,7 +33,7 @@ export default function Home() {
   const [reply, setReply] = useState("");
   const [promptCopied, setPromptCopied] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState("claude-sonnet-5-5");
+  const [model, setModel] = useState(DEFAULT_MODEL);
   const [remember, setRemember] = useState(false);
   const [correctionSent, setCorrectionSent] = useState(false);
 
@@ -108,6 +108,7 @@ export default function Home() {
 
   function copyPrompt() {
     const { clean, flags } = readInput();
+    if (!clean) return setError("Add the decision text itself — modifiers alone aren't enough to parse.");
     setError(null);
     copyText(buildPastePrompt(clean, flags), "prompt");
   }
@@ -124,23 +125,35 @@ export default function Home() {
 
   function forgeIt() {
     const { clean, flags } = readInput();
+    if (!clean) return setError("Add the decision text itself — modifiers alone aren't enough to parse.");
     run(clean, flags);
   }
 
   function downloadSvg() {
     if (!svgRef.current) return;
-    const blob = new Blob([`<?xml version="1.0" encoding="UTF-8"?>\n${svgRef.current.outerHTML}`], { type: "image/svg+xml" });
+    // Export at 100% and without any click-to-trace dimming.
+    const svg = svgRef.current.cloneNode(true) as SVGSVGElement;
+    const [, , w, h] = (svg.getAttribute("viewBox") ?? "").split(/\s+/);
+    if (w && h) (svg.setAttribute("width", w), svg.setAttribute("height", h));
+    svg.querySelectorAll("[opacity]").forEach((el) => el.removeAttribute("opacity"));
+    const blob = new Blob([`<?xml version="1.0" encoding="UTF-8"?>\n${svg.outerHTML}`], { type: "image/svg+xml" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `${(forge.title || "forkcast").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.svg`;
+    a.download = `${(forge.title || "forkcast").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "forkcast"}.svg`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(a.href);
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
   async function copyMermaid() {
-    await navigator.clipboard.writeText(mermaid);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard.writeText(mermaid);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setError("Clipboard blocked by the browser. Turn on --mermaid to show the code, then copy it manually.");
+    }
   }
 
   return (
@@ -179,10 +192,10 @@ export default function Home() {
           </div>
           <div className="kicker">03 · ENGINE</div>
           <div className="tabs" role="tablist">
-            <button role="tab" aria-selected={engine === "paste"} className={engine === "paste" ? "on" : ""} onClick={() => setEngine("paste")}>
+            <button role="tab" aria-selected={engine === "paste"} className={engine === "paste" ? "on" : ""} onClick={() => (setEngine("paste"), setError(null))}>
               Paste from Claude <span className="free">FREE</span>
             </button>
-            <button role="tab" aria-selected={engine === "key"} className={engine === "key" ? "on" : ""} onClick={() => setEngine("key")}>
+            <button role="tab" aria-selected={engine === "key"} className={engine === "key" ? "on" : ""} onClick={() => (setEngine("key"), setError(null))}>
               My API key
             </button>
           </div>
