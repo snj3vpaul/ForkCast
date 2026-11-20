@@ -1,9 +1,32 @@
 import type { Forge, FlowNode } from "./types";
 
-const esc = (s: string) => (s || "").replace(/"/g, "'").replace(/[<>]/g, "");
-const sid = (id: string) => "n_" + id.replace(/[^A-Za-z0-9_]/g, "_");
+// Mermaid labels: no raw quotes, newlines, pipes (edge-label delimiters), backticks (markdown strings) or angle brackets.
+const esc = (s: string | undefined) =>
+  (s ?? "")
+    .replace(/\s*[\r\n]+\s*/g, " ")
+    .replace(/"/g, "'")
+    .replace(/`/g, "'")
+    .replace(/\|/g, "/")
+    .replace(/[<>]/g, "")
+    .trim();
+
+/** Stable, collision-free Mermaid ids: "END-1" and "END_1" must not merge into one node. */
+function idMap(ids: string[], prefix: string): Map<string, string> {
+  const m = new Map<string, string>();
+  const used = new Set<string>();
+  for (const id of ids) {
+    if (m.has(id)) continue;
+    const base = prefix + (id.replace(/[^A-Za-z0-9_]/g, "_") || "x");
+    let out = base;
+    for (let k = 2; used.has(out); k++) out = `${base}_${k}`;
+    used.add(out);
+    m.set(id, out);
+  }
+  return m;
+}
 
 function shape(n: FlowNode): string {
+  const kindName = n.kind === "split" || n.kind === "join" ? n.kind : "";
   const tag = n.inferred ? " ✎" : "";
   const L = esc(n.label) + tag;
   switch (n.kind) {
@@ -18,7 +41,7 @@ function shape(n: FlowNode): string {
       return `[["🔒 ${L}"]]`;
     case "split":
     case "join":
-      return `[/"${L || n.kind}"/]`;
+      return `[/"${L || kindName}"/]`;
     default:
       return `["${L}"]`;
   }
@@ -30,18 +53,22 @@ export function toMermaid(f: Forge): string {
     "%%{init: {'theme':'base','themeVariables':{'fontFamily':'JetBrains Mono, monospace','primaryColor':'#f4efe6','primaryBorderColor':'#1b1a17','lineColor':'#1b1a17','primaryTextColor':'#1b1a17'}}}%%",
     "flowchart TD",
   ];
-  const actors = [...new Set(f.nodes.map((n) => n.actor).filter(Boolean))] as string[];
+  const ids = idMap(f.nodes.map((n) => n.id), "n_");
+  const sid = (id: string) => ids.get(id) ?? "n_missing";
+  const actors = [...new Set(f.nodes.map((n) => n.actor?.trim()).filter(Boolean))] as string[];
+  const lanes = idMap(actors, "lane_");
   const decl = (n: FlowNode) => `    ${sid(n.id)}${shape(n)}`;
   if (actors.length >= 2) {
     for (const a of actors) {
-      lines.push(`  subgraph ${sid(a)}["${esc(a)}"]`);
-      f.nodes.filter((n) => n.actor === a).forEach((n) => lines.push(decl(n)));
+      lines.push(`  subgraph ${lanes.get(a)}["${esc(a)}"]`);
+      f.nodes.filter((n) => n.actor?.trim() === a).forEach((n) => lines.push(decl(n)));
       lines.push("  end");
     }
-    f.nodes.filter((n) => !n.actor).forEach((n) => lines.push(decl(n)));
+    f.nodes.filter((n) => !n.actor?.trim()).forEach((n) => lines.push(decl(n)));
   } else f.nodes.forEach((n) => lines.push(decl(n)));
 
   f.edges.forEach((e) => {
+    if (!ids.has(e.from) || !ids.has(e.to)) return;
     const arrow = e.kind === "unstated" ? "-.->" : e.kind === "loop" ? "==>" : "-->";
     const label = [e.label, e.maxIterations && `max ${e.maxIterations}`].filter(Boolean).join(" · ");
     lines.push(`  ${sid(e.from)} ${arrow}${label ? `|"${esc(label)}"|` : ""} ${sid(e.to)}`);

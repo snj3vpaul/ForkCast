@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useMemo, useState } from "react";
+import { forwardRef, useEffect, useMemo, useState } from "react";
 import type { Forge } from "@/lib/types";
 import { layout, reachable, type PNode, type PEdge } from "@/lib/layout";
 
@@ -27,7 +27,13 @@ export const Diagram = forwardRef<SVGSVGElement, Props>(function Diagram({ forge
   const [hover, setHover] = useState<{ n: PNode; x: number; y: number } | null>(null);
   const [pinned, setPinned] = useState<PNode | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
-  const lit = useMemo(() => (focus ? reachable(forge, focus) : null), [focus, forge]);
+  // A new chart must never inherit the previous chart's highlight (it would dim everything).
+  useEffect(() => {
+    setFocus(null);
+    setPinned(null);
+    setHover(null);
+  }, [forge]);
+  const lit = useMemo(() => (focus && L.byId.has(focus) ? reachable(forge, focus) : null), [focus, forge, L]);
 
   const flagged = useMemo(() => {
     const m = new Map<string, string[]>();
@@ -129,8 +135,8 @@ export const Diagram = forwardRef<SVGSVGElement, Props>(function Diagram({ forge
         </g>
 
         {/* Phase brackets */}
-        {L.phases.map((p) => (
-          <g key={p.name}>
+        {L.phases.map((p, i) => (
+          <g key={i}>
             <path d={`M${W - 34},${p.y1} h8 V${p.y2} h-8`} fill="none" stroke={INK} />
             <text transform={`translate(${W - 14},${(p.y1 + p.y2) / 2}) rotate(90)`} textAnchor="middle" fontFamily={MONO} fontSize={10} letterSpacing="0.12em" fill={INK}>
               {p.name.toUpperCase()}

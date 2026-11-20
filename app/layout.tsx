@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "Forkcast — every fork in your decision, mapped",
   description:
     "Paste any written decision or SOP. Forkcast turns it into a decision-grade flowchart: every gate, actor, loop and gap made explicit.",
+  icons: { icon: "/icon.svg" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

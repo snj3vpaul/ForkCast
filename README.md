@@ -62,9 +62,20 @@ The model handles the *logic*. Forkcast's own renderer handles the *look*, so ev
 ```bash
 npm install
 npm run dev
+npm test     # 350+ unit tests, including a 300-seed fuzz pass over the whole pipeline
 ```
 
 On first load the page shows a pre-rendered demo. No environment variables are needed.
+
+## What it tolerates
+
+Model replies are hand-copied and untrusted in shape, so everything goes through `lib/normalize.ts` before it is drawn:
+
+- **Messy pastes:** chatter around the JSON, no fence, CRLF/BOM, trailing commas, tool-call wrappers, and replies split across a “continue” (both parts pasted together).
+- **Drifting output:** stringified arrays, kind aliases (`decision` → gate), bad or missing `lateral`, ids/labels that aren't strings, duplicate ids, edge ids that differ only in case or punctuation, missing Parse Report fields.
+- **Clear failures:** a reply with no JSON (Claude asked a question or used an artifact), a cut-off reply, or an empty graph each get a specific message instead of a blank chart.
+
+The quality bar (`lib/validate.ts`) then reports dead ends, gate exits, unreachable nodes, outcomes with outgoing edges, and loops with no exit or no labelled exit condition, checked per loop.
 
 ## Deploy on Vercel
 
